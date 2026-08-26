@@ -22,12 +22,12 @@ Para evitar conflictos y asegurar el funcionamiento de la red (DNS local), se di
     |
     |---> Nodo 1 (El Cerebro) --- IP: 192.168.100.75 | Tailscale: 100.84.189.38
     |       • Hardware: Raspberry Pi (1GB RAM) + MicroSD 60GB
-    |       • Servicios: Pi-hole, Unbound, Home Assistant, Vaultwarden, Homepage, Tailscale Exit Node
+    |       • Servicios: Pi-hole, Unbound, Home Assistant, Homepage, Uptime Kuma, Syncthing, Tailscale (Exit Node).
     |       • Objetivo: Alta disponibilidad (Misión crítica). Nunca debe apagarse.
     |
     |---> Nodo 2 (El Músculo) --- IP: 192.168.100.80 | Tailscale: 100.66.109.86
             • Hardware: Raspberry Pi (1GB RAM) + Hub USB Externo + SSD 1TB
-            • Servicios: Jellyfin, Transmission, Subliminal (Robot de subtítulos)
+            • Servicios: Jellyfin, Transmission, Subliminal, Prowlarr, Samba (SMB), Dockge, Watchtower.
             • Objetivo: Procesamiento multimedia y descargas 24/7.
 ```
 
@@ -59,9 +59,19 @@ Se identificó el UUID de la partición `/dev/sda2` para evitar dependencias de 
 UUID=726b4d76-cdd5-4a51-ac5e-6a40baabf715 /srv/media ext4 defaults,noatime 0 2
 ```
 
-**2. Jellyfin y Transmission (Docker Compose):**
-Ambos servicios fueron desplegados en contenedores para aislar sus dependencias. Transmission se configuró con acceso a `/srv/media/downloads` y Jellyfin escanea `/srv/media/movies` y `/srv/media/series`.
-Esto permite la estrategia "Zero-Clicks": al agregar un magnet link en Transmission, se puede especificar directamente `/movies` como ruta de descarga. Una vez finalizada la transferencia y eliminado el sufijo `.part`, Jellyfin detecta la película instantáneamente.
+**2. Samba (Disco en Red):**
+Para poder administrar y enviar archivos al SSD de 1TB de forma nativa desde cualquier laptop de la casa (Windows/Linux/Mac), se instaló `samba` y se exportó el directorio de medios:
+```bash
+sudo apt-get install samba
+sudo smbpasswd -a aspencito
+```
+
+**3. Jellyfin, Transmission y Prowlarr:**
+Desplegados mediante `docker-compose.yaml` (gestionados a través de **Dockge** en el puerto `5001`). Transmission se configuró con acceso a `/srv/media/downloads` y Jellyfin a `/srv/media/movies` y `/srv/media/series`.
+Prowlarr está enlazado a Transmission para inyectarle búsquedas Torrent automáticas. Todo esto conforma la estrategia "Zero-Clicks".
+
+**4. Watchtower (Actualizaciones Automáticas):**
+Se agregó el contenedor `containrrr/watchtower` con un schedule en cron (`0 0 4 * * *`) que verifica actualizaciones a las 4:00 AM, descarga las nuevas imágenes de Jellyfin o Transmission, y las reinicia automáticamente para mantener el servidor seguro.
 
 ## 4. Errores durante la migración y cómo se solucionaron
 
@@ -88,7 +98,7 @@ subliminal download -l es /srv/media/series
 Escanea el directorio en busca de nuevos archivos de video y descarga el `.srt` adyacente sin intervención del usuario.
 
 ## 6. Respaldo (Backups) automatizado
-El archivo de contraseñas de Vaultwarden y las configuraciones de Home Assistant son críticos. Un script en `cron` (`backup.sh`) corre a las 3:00 AM en el Nodo 1:
+El archivo de configuraciones de Home Assistant y Pi-hole son críticos. Un script en `cron` (`backup.sh`) corre a las 3:00 AM en el Nodo 1:
 1. Genera un `.tar.gz` de la configuración de Docker y de `/etc/pihole`.
 2. Utiliza `scp` para enviar una copia encriptada vía Tailscale (`100.66.109.86`) hacia la carpeta `/srv/media/backups` en el SSD de 1TB en el Nodo 2.
 3. Utiliza `rclone` para hacer upload a Google Drive.
