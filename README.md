@@ -1,5 +1,7 @@
 # Raspberry Pi Homelab Cluster
 
+> **[Español] → La documentación completa, con instalación paso a paso y los errores que me encontré, está en [README.es.md](README.es.md).**
+
 A practical baseline for deploying a minimal, two-node Raspberry Pi homelab cluster. 
 
 ## Architecture
